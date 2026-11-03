@@ -1,0 +1,442 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CompanyType {
+  internal
+  client
+  partner
+}
+
+enum GlobalRole {
+  admin
+  project_manager
+  member
+  external_client
+  viewer
+}
+
+enum ProjectStatus {
+  draft
+  preparation
+  active
+  paused
+  at_risk
+  pending_client
+  finished
+  archived
+}
+
+enum ProjectRole {
+  owner
+  project_manager
+  editor
+  contributor
+  viewer
+  client_commenter
+}
+
+enum MemberStatus {
+  invited
+  active
+  removed
+}
+
+enum TaskStatus {
+  planned
+  should_start
+  in_progress
+  paused
+  blocked
+  in_review
+  done
+  accepted
+  rejected
+  cancelled
+}
+
+enum Priority {
+  low
+  medium
+  high
+  critical
+}
+
+enum SchedulingMode {
+  fixed_dates
+  duration_deadline
+  start_duration
+}
+
+enum FeedbackStatus {
+  conforme
+  conforme_con_observaciones
+  inconforme
+  requiere_cambios
+}
+
+enum VaultItemType {
+  folder
+  file
+}
+
+enum VaultSensitivity {
+  normal
+  confidential
+  restricted
+}
+
+enum PermissionSubjectType {
+  user
+  project_role
+  project_member
+  company
+}
+
+enum VaultPermission {
+  view
+  download
+  upload_child
+  edit_metadata
+  move
+  delete
+  manage_permissions
+}
+
+enum TaskFileRelationType {
+  attachment
+  evidence
+  requirement
+  deliverable
+  reference
+}
+
+enum CommentVisibility {
+  internal
+  project
+  client_visible
+}
+
+enum TimeEntryStatus {
+  draft
+  submitted
+  approved
+  rejected
+}
+
+model User {
+  id             String           @id @default(uuid())
+  keycloakSub    String?          @unique
+  username       String           @unique
+  email          String           @unique
+  firstName      String           @default("")
+  lastName       String           @default("")
+  displayName    String
+  locale         String           @default("en")
+  primaryRole    GlobalRole       @default(member)
+  isExternal     Boolean          @default(false)
+  companyId      String?
+  company        Company?         @relation(fields: [companyId], references: [id])
+  memberships    ProjectMember[]
+  ownedProjects  Project[]
+  assignments    TaskAssignment[]
+  comments       TaskComment[]
+  feedback       TaskFeedback[]
+  auditEvents    AuditEvent[]
+  uploadedItems  VaultItem[]      @relation("UploadedItems")
+  timeEntries    TimeEntry[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+}
+
+model Company {
+  id        String      @id @default(uuid())
+  name      String      @unique
+  type      CompanyType
+  taxId     String?
+  users     User[]
+  projects  Project[]   @relation("ClientProjects")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model Project {
+  id                  String          @id @default(uuid())
+  name                String
+  manufacturingOrder  String          @default("")
+  description         String          @default("")
+  clientCompanyId     String?
+  clientCompany       Company?        @relation("ClientProjects", fields: [clientCompanyId], references: [id])
+  ownerUserId         String
+  owner               User            @relation(fields: [ownerUserId], references: [id])
+  projectManagerId    String
+  status              ProjectStatus   @default(active)
+  priority            Priority        @default(medium)
+  color               String          @default("#6f9fc8")
+  plannedStartDate    DateTime?
+  plannedEndDate      DateTime?
+  actualStartDate     DateTime?
+  actualEndDate       DateTime?
+  budgetedHours       Decimal         @default(0)
+  members             ProjectMember[]
+  categorySets        CategorySet[]
+  categories          TaskCategory[]
+  milestones          Milestone[]
+  tasks               Task[]
+  vaultItems          VaultItem[]
+  auditEvents         AuditEvent[]
+  timeEntries         TimeEntry[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+}
+
+model Milestone {
+  id             String          @id @default(uuid())
+  projectId      String
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name           String
+  description    String          @default("")
+  plannedStartAt DateTime?
+  plannedEndAt   DateTime?
+  sortOrder      Int             @default(0)
+  isActive       Boolean         @default(true)
+  tasks          Task[]
+  files          MilestoneFile[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([projectId, sortOrder])
+}
+
+model ProjectMember {
+  id          String       @id @default(uuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  projectRole ProjectRole
+  status      MemberStatus @default(active)
+  joinedAt    DateTime     @default(now())
+
+  @@unique([projectId, userId])
+}
+
+model CategorySet {
+  id          String         @id @default(uuid())
+  projectId   String?
+  project     Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String         @default("")
+  scope       String         @default("project")
+  categories  TaskCategory[]
+  createdAt   DateTime       @default(now())
+}
+
+model TaskCategory {
+  id            String       @id @default(uuid())
+  projectId     String
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  categorySetId String?
+  categorySet   CategorySet? @relation(fields: [categorySetId], references: [id])
+  name          String
+  description   String       @default("")
+  color         String       @default("#7aa2a8")
+  icon          String       @default("tag")
+  sortOrder     Int          @default(0)
+  isActive      Boolean      @default(true)
+  tasks         Task[]
+
+  @@unique([projectId, name])
+}
+
+model Task {
+  id              String              @id @default(uuid())
+  projectId       String
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestoneId     String?
+  milestone       Milestone?          @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  categoryId      String?
+  category        TaskCategory?       @relation(fields: [categoryId], references: [id])
+  title           String
+  description     String              @default("")
+  status          TaskStatus          @default(planned)
+  priority        Priority            @default(medium)
+  sortOrder       Int                 @default(0)
+  schedulingMode  SchedulingMode      @default(fixed_dates)
+  plannedStartAt  DateTime?
+  plannedEndAt    DateTime?
+  actualStartAt   DateTime?
+  actualEndAt     DateTime?
+  deadlineAt      DateTime?
+  estimatedHours  Decimal             @default(0)
+  actualHours     Decimal             @default(0)
+  progressPercent Int                 @default(0)
+  qualityRating   Int?
+  feedbackStatus  FeedbackStatus?
+  feedbackNotes   String?
+  createdById     String
+  steps           TaskStep[]
+  assignments     TaskAssignment[]
+  comments        TaskComment[]
+  feedback         TaskFeedback[]
+  files           TaskFile[]
+  timeEntries     TimeEntry[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([projectId, sortOrder])
+}
+
+model TaskStep {
+  id              String   @id @default(uuid())
+  taskId          String
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  title           String
+  description     String   @default("")
+  sortOrder       Int      @default(0)
+  estimatedHours  Decimal  @default(0)
+  weightPercent   Int      @default(0)
+  progressPercent Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([taskId, sortOrder])
+}
+
+model TaskAssignment {
+  id             String  @id @default(uuid())
+  taskId         String
+  task           Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User    @relation(fields: [userId], references: [id])
+  assignmentRole String  @default("responsible")
+  estimatedHours Decimal @default(0)
+  actualHours    Decimal @default(0)
+
+  @@unique([taskId, userId])
+}
+
+model TaskComment {
+  id         String            @id @default(uuid())
+  taskId     String
+  task       Task              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User              @relation(fields: [authorId], references: [id])
+  body       String
+  visibility CommentVisibility @default(project)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+}
+
+model TaskFeedback {
+  id        String         @id @default(uuid())
+  taskId    String
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User           @relation(fields: [authorId], references: [id])
+  status    FeedbackStatus
+  rating    Int?
+  notes     String         @default("")
+  createdAt DateTime       @default(now())
+}
+
+model VaultItem {
+  id             String           @id @default(uuid())
+  projectId      String
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId       String?
+  parent         VaultItem?       @relation("VaultTree", fields: [parentId], references: [id])
+  children       VaultItem[]      @relation("VaultTree")
+  itemType       VaultItemType
+  name           String
+  normalizedName String
+  storageKey     String?
+  mimeType       String?
+  fileExtension  String?
+  sizeBytes      BigInt?
+  hashSha256     String?
+  version        Int              @default(1)
+  sensitivity    VaultSensitivity @default(normal)
+  uploadedById   String?
+  uploadedBy     User?            @relation("UploadedItems", fields: [uploadedById], references: [id])
+  permissions    FilePermission[]
+  taskLinks      TaskFile[]
+  milestoneLinks MilestoneFile[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+}
+
+model MilestoneFile {
+  id          String    @id @default(uuid())
+  milestoneId String
+  milestone   Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  vaultItemId String
+  vaultItem   VaultItem @relation(fields: [vaultItemId], references: [id], onDelete: Cascade)
+  linkedById  String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([milestoneId, vaultItemId])
+}
+
+model FilePermission {
+  id             String                @id @default(uuid())
+  vaultItemId    String
+  vaultItem      VaultItem             @relation(fields: [vaultItemId], references: [id], onDelete: Cascade)
+  subjectType    PermissionSubjectType
+  subjectId      String
+  permission     VaultPermission
+  inheritedFromId String?
+  createdById    String?
+  createdAt      DateTime              @default(now())
+}
+
+model TaskFile {
+  id           String               @id @default(uuid())
+  taskId       String
+  task         Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  vaultItemId  String
+  vaultItem    VaultItem            @relation(fields: [vaultItemId], references: [id], onDelete: Cascade)
+  relationType TaskFileRelationType @default(attachment)
+  linkedById   String?
+  createdAt    DateTime             @default(now())
+
+  @@unique([taskId, vaultItemId])
+}
+
+model TimeEntry {
+  id          String          @id @default(uuid())
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId      String?
+  task        Task?           @relation(fields: [taskId], references: [id])
+  userId      String
+  user        User            @relation(fields: [userId], references: [id])
+  date        DateTime
+  hours       Decimal
+  description String          @default("")
+  status      TimeEntryStatus @default(draft)
+  createdAt   DateTime        @default(now())
+}
+
+model AuditEvent {
+  id          String   @id @default(uuid())
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorUserId String?
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+  entityType  String
+  entityId    String
+  action      String
+  beforeJson  Json?
+  afterJson   Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+}

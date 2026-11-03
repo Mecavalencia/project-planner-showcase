@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+coverage
+.env
+.env.local
+.env.*.local
+*.log
+logs
+uploads
+tmp
+playwright-report
+test-results
+.git

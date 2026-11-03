@@ -1,0 +1,180 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: planner-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      minio:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      API_PORT: 4000
+      DATABASE_URL: postgresql://${PLANNER_POSTGRES_USER:?Set PLANNER_POSTGRES_USER in .env}:${PLANNER_POSTGRES_PASSWORD:?Set PLANNER_POSTGRES_PASSWORD in .env}@postgres:5432/${PLANNER_POSTGRES_DB:?Set PLANNER_POSTGRES_DB in .env}?schema=public
+      KEYCLOAK_ADMIN: ${KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME:?Set KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME in .env}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD:?Set KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD in .env}
+      KEYCLOAK_REALM: planner
+      KEYCLOAK_TOKEN_ISSUER: http://localhost:8080/realms/planner
+      KEYCLOAK_PUBLIC_ISSUER: http://localhost:8080/realms/planner
+      KEYCLOAK_INTERNAL_ISSUER: http://keycloak:8080/realms/planner
+      KEYCLOAK_CLIENT_ID: planner-web
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Set KEYCLOAK_CLIENT_SECRET in .env}
+      KEYCLOAK_API_AUDIENCE: planner-api
+      CORS_ORIGIN: http://localhost:3000
+      ALLOW_DEV_AUTH: "false"
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: eu-west-1
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      S3_BUCKET: planner-vault
+      S3_FORCE_PATH_STYLE: "true"
+      REDIS_URL: redis://redis:6379
+    command: >
+      sh -c "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma &&
+      npm run start -w apps/api"
+    ports:
+      - "4000:4000"
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    container_name: planner-web
+    depends_on:
+      api:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in .env}
+      KEYCLOAK_REALM: planner
+      KEYCLOAK_PUBLIC_ISSUER: http://localhost:8080/realms/planner
+      KEYCLOAK_INTERNAL_ISSUER: http://keycloak:8080/realms/planner
+      KEYCLOAK_CLIENT_ID: planner-web
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Set KEYCLOAK_CLIENT_SECRET in .env}
+    ports:
+      - "3000:3000"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: planner-postgres
+    environment:
+      POSTGRES_USER: ${PLANNER_POSTGRES_USER:?Set PLANNER_POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${PLANNER_POSTGRES_PASSWORD:?Set PLANNER_POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${PLANNER_POSTGRES_DB:?Set PLANNER_POSTGRES_DB in .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - planner_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: planner-keycloak-db
+    environment:
+      POSTGRES_USER: ${KEYCLOAK_POSTGRES_USER:?Set KEYCLOAK_POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${KEYCLOAK_POSTGRES_PASSWORD:?Set KEYCLOAK_POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${KEYCLOAK_POSTGRES_DB:?Set KEYCLOAK_POSTGRES_DB in .env}
+    volumes:
+      - planner_keycloak_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.1
+    container_name: planner-keycloak
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/${KEYCLOAK_POSTGRES_DB:?Set KEYCLOAK_POSTGRES_DB in .env}
+      KC_DB_USERNAME: ${KEYCLOAK_POSTGRES_USER:?Set KEYCLOAK_POSTGRES_USER in .env}
+      KC_DB_PASSWORD: ${KEYCLOAK_POSTGRES_PASSWORD:?Set KEYCLOAK_POSTGRES_PASSWORD in .env}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME:?Set KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME in .env}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD:?Set KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD in .env}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Set KEYCLOAK_CLIENT_SECRET in .env}
+      KEYCLOAK_API_CLIENT_SECRET: ${KEYCLOAK_API_CLIENT_SECRET:?Set KEYCLOAK_API_CLIENT_SECRET in .env}
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /opt/keycloak/data/import
+        sed \
+          -e "s|__KEYCLOAK_CLIENT_SECRET__|$${KEYCLOAK_CLIENT_SECRET}|g" \
+          -e "s|__KEYCLOAK_API_CLIENT_SECRET__|$${KEYCLOAK_API_CLIENT_SECRET}|g" \
+          /opt/keycloak/data/import-src/realm-planner.template.json > /opt/keycloak/data/import/realm-planner.json
+        exec /opt/keycloak/bin/kc.sh start-dev --import-realm
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/keycloak/realm-planner.template.json:/opt/keycloak/data/import-src/realm-planner.template.json:ro
+
+  minio:
+    image: minio/minio:latest
+    container_name: planner-minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - planner_minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 8 &&
+      mc alias set local http://minio:9000 \"$${MINIO_ROOT_USER}\" \"$${MINIO_ROOT_PASSWORD}\" &&
+      mc mb -p local/$${S3_BUCKET:-planner-vault} || true &&
+      mc anonymous set none local/$${S3_BUCKET:-planner-vault}
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      S3_BUCKET: planner-vault
+
+  redis:
+    image: redis:7-alpine
+    container_name: planner-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - planner_redis_data:/data
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: planner-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  planner_postgres_data:
+  planner_keycloak_data:
+  planner_minio_data:
+  planner_redis_data:

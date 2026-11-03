@@ -1,0 +1,166 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at 16% 8%, oklch(0.95 0.03 190), transparent 28rem),
+    linear-gradient(180deg, oklch(0.985 0.006 210), oklch(0.965 0.012 210));
+  color: theme("colors.foreground");
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.gantt-container {
+  position: relative;
+  width: 100%;
+  min-height: 430px;
+  overflow: auto;
+  color: oklch(0.22 0.018 220);
+  font-size: 12px;
+  line-height: 14px;
+}
+
+.gantt-container .grid-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 10;
+  background: oklch(0.965 0.01 210);
+}
+
+.gantt-container .popup-wrapper {
+  position: absolute;
+  z-index: 20;
+  width: max-content;
+  border-radius: 6px;
+  background: oklch(0.26 0.025 220);
+  padding: 10px;
+  color: oklch(0.98 0.006 210);
+  box-shadow: 0 16px 44px rgba(31, 45, 54, 0.18);
+}
+
+.gantt-container .popup-wrapper.hidden {
+  opacity: 0;
+}
+
+.gantt-container .upper-text,
+.gantt-container .lower-text {
+  color: oklch(0.34 0.02 220);
+  text-anchor: middle;
+  position: absolute;
+  width: fit-content;
+}
+
+.gantt-container .upper-text {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.gantt-container .lower-text {
+  font-size: 12px;
+  transform: translateX(-50%);
+}
+
+.gantt-container .upper-header {
+  height: 40px;
+}
+
+.gantt-container .lower-header {
+  height: 30px;
+}
+
+.gantt-container .side-header {
+  position: fixed;
+  background: oklch(0.965 0.01 210);
+  padding: 0 10px;
+}
+
+.gantt {
+  position: absolute;
+  user-select: none;
+}
+
+.gantt .grid-background {
+  fill: oklch(0.985 0.006 210);
+}
+
+.gantt .grid-row {
+  fill: oklch(0.985 0.006 210);
+}
+
+.gantt .row-line {
+  stroke: oklch(0.88 0.012 210);
+}
+
+.gantt .tick {
+  stroke: oklch(0.9 0.012 210);
+  stroke-width: 0.4;
+}
+
+.gantt .tick.thick {
+  stroke: oklch(0.82 0.016 210);
+  stroke-width: 0.7;
+}
+
+.gantt .arrow {
+  fill: none;
+  stroke: oklch(0.55 0.02 220);
+  stroke-width: 1;
+}
+
+.gantt .bar-wrapper {
+  cursor: pointer;
+}
+
+.gantt .bar-wrapper .bar {
+  fill: oklch(0.78 0.045 195);
+  stroke: transparent;
+  filter: drop-shadow(0 1px 3px rgba(30, 54, 66, 0.18));
+  rx: 5;
+  ry: 5;
+}
+
+.gantt .bar-progress {
+  fill: oklch(0.56 0.08 190);
+}
+
+.gantt .bar-label {
+  dominant-baseline: central;
+  fill: oklch(0.19 0.018 220);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.gantt .handle {
+  fill: oklch(0.62 0.04 210);
+  cursor: ew-resize;
+  opacity: 0;
+}
+
+.gantt .bar-wrapper.active .handle {
+  opacity: 1;
+}
+
+.gantt .bar-wrapper.blocked .bar,
+.gantt .bar-wrapper.rejected .bar {
+  fill: oklch(0.72 0.08 25);
+}
+
+.gantt .bar-wrapper.done .bar,
+.gantt .bar-wrapper.accepted .bar {
+  fill: oklch(0.73 0.08 145);
+}

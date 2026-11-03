@@ -1,0 +1,34 @@
+{
+  "name": "@planner/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "dotenv -e ../../.env -- next dev --webpack -p 3000",
+    "build": "dotenv -e ../../.env -- next build --webpack",
+    "start": "next start -p 3000",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@planner/shared": "0.1.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "frappe-gantt": "0.9.0",
+    "lucide-react": "0.468.0",
+    "next": "16.4.4",
+    "next-auth": "^4.24.15",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwind-merge": "2.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "10.4.20",
+    "eslint": "9.39.5",
+    "eslint-config-next": "^16.4.4",
+    "postcss": "8.5.23",
+    "tailwindcss": "3.4.17",
+    "typescript": "5.6.3"
+  }
+}
